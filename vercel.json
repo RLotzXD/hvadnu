@@ -1,5 +1,5 @@
 {
-  "buildCommand": "echo 'Using pre-built web files'",
+  "buildCommand": "bash build.sh",
   "outputDirectory": "public",
   "cleanUrls": true,
   "trailingSlash": false
