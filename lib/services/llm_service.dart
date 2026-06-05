@@ -18,6 +18,11 @@ class LLMService {
     required GameSession session,
     required PlayerAction action,
   }) async {
+    final participants = session.config.participants;
+    final fallbackName = participants.isNotEmpty
+        ? participants.first.name
+        : (session.config.language == 'en' ? 'little friend' : 'lille ven');
+
     try {
       final systemPrompt = PromptBuilder.buildSystemPrompt(session.config);
       final userMessage = PromptBuilder.buildUserMessage(
@@ -29,6 +34,10 @@ class LLMService {
       final contents = <Map<String, dynamic>>[];
 
       if (action.isPhoto) {
+        if (action.content.trim().isEmpty) {
+          throw Exception('Tom billeddata modtaget');
+        }
+
         contents.add({
           'role': 'user',
           'parts': [
@@ -87,13 +96,21 @@ class LLMService {
 
       final candidates = response.data['candidates'] as List?;
       if (candidates == null || candidates.isEmpty) {
-        return LLMResponse.fallback(actionType: action.type);
+        return LLMResponse.fallback(
+          actionType: action.type,
+          participantName: fallbackName,
+          language: session.config.language,
+        );
       }
 
       final content = candidates[0]['content']['parts'][0]['text'] as String;
       return _parseResponse(content, action.type);
     } catch (e) {
-      return LLMResponse.fallback(actionType: action.type);
+      return LLMResponse.fallback(
+        actionType: action.type,
+        participantName: fallbackName,
+        language: session.config.language,
+      );
     }
   }
 

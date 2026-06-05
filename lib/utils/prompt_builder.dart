@@ -122,8 +122,10 @@ Du SKAL svare med præcis dette JSON-format:
 
     // Calculate whose turn is next (for the new challenge)
     String? nextPlayerName;
-    if (participants.length >= 2) {
-      final nextPlayerIndex = (session.storyState.currentStep + 1) % participants.length;
+    if (participants.isNotEmpty) {
+      final nextPlayerIndex = participants.length >= 2
+          ? (session.storyState.currentStep + 1) % participants.length
+          : 0;
       nextPlayerName = participants[nextPlayerIndex].name;
     }
 
@@ -146,6 +148,8 @@ Du SKAL svare med præcis dette JSON-format:
       if (inputType == 'photo') {
         buffer.writeln('The child has taken a picture of something.');
         buffer.writeln('[Image data attached]');
+        buffer.writeln(
+            'IMPORTANT: Analyze the ACTUAL attached image and mention at least one concrete detail (object, color, shape, or material) from what you can see.');
       } else {
         buffer.writeln('The child said: "$playerInput"');
       }
@@ -161,7 +165,7 @@ Du SKAL svare med præcis dette JSON-format:
       if (nextPlayerName != null && session.storyState.currentStep + 1 < session.config.maxSteps) {
         buffer.writeln('');
         buffer.writeln('### NEXT TURN: $nextPlayerName');
-        buffer.writeln('The next challenge must be directed specifically at $nextPlayerName. Start the challenge with their name!');
+        buffer.writeln('The next challenge must be directed specifically at $nextPlayerName. Start the challenge with "$nextPlayerName," as the first word.');
       }
 
       buffer.writeln('');
@@ -185,6 +189,8 @@ Du SKAL svare med præcis dette JSON-format:
       if (inputType == 'photo') {
         buffer.writeln('Barnet har taget et billede af noget.');
         buffer.writeln('[Billeddata er vedlagt]');
+        buffer.writeln(
+            'VIGTIGT: Analyser det faktiske vedlagte billede og nævn mindst én konkret detalje (genstand, farve, form eller materiale) fra det, du kan se.');
       } else {
         buffer.writeln('Barnet sagde: "$playerInput"');
       }
@@ -200,7 +206,7 @@ Du SKAL svare med præcis dette JSON-format:
       if (nextPlayerName != null && session.storyState.currentStep + 1 < session.config.maxSteps) {
         buffer.writeln('');
         buffer.writeln('### NÆSTE TUR: $nextPlayerName');
-        buffer.writeln('Den næste udfordring skal være rettet specifikt mod $nextPlayerName. Start udfordringen med deres navn!');
+        buffer.writeln('Den næste udfordring skal være rettet specifikt mod $nextPlayerName. Start udfordringen med "$nextPlayerName," som første ord.');
       }
 
       buffer.writeln('');

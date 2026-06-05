@@ -33,20 +33,47 @@ class LLMResponse {
   }
 
   /// Fallback response when LLM fails
-  factory LLMResponse.fallback({required String actionType}) {
+  factory LLMResponse.fallback({
+    required String actionType,
+    String? participantName,
+    String language = 'da',
+  }) {
+    final name = (participantName != null && participantName.trim().isNotEmpty)
+        ? participantName.trim()
+        : (language == 'en' ? 'little friend' : 'lille ven');
+
     if (actionType == 'photo') {
-      return const LLMResponse(
+      if (language == 'en') {
+        return LLMResponse(
+          validationSuccess: true,
+          storySegment:
+              'Wow, $name! I can see something exciting in your picture. That is perfect for our adventure.',
+          nextChallenge: '$name, can you now find something in a different color?',
+        );
+      }
+
+      return LLMResponse(
         validationSuccess: true,
         storySegment:
-            'Åh, hvor spændende! Jeg kan se noget helt magisk dér! Det passer perfekt til vores eventyr.',
-        nextChallenge: 'Kan du nu finde noget i en anden farve?',
+            'Åh, hvor spændende, $name! Jeg kan se noget helt magisk dér! Det passer perfekt til vores eventyr.',
+        nextChallenge: '$name, kan du nu finde noget i en anden farve?',
       );
     }
-    return const LLMResponse(
+
+    if (language == 'en') {
+      return LLMResponse(
+        validationSuccess: true,
+        storySegment:
+            'Yes, exactly right, $name! You are a true adventurer. Let us continue our magical journey.',
+        nextChallenge: '$name, what can you discover now?',
+      );
+    }
+
+    return LLMResponse(
       validationSuccess: true,
       storySegment:
-          'Ja, helt rigtigt! Du er en sand eventurer! Lad os fortsætte vores magiske rejse.',
-      nextChallenge: 'Hvad kan du opdage nu?',
+          'Ja, helt rigtigt, $name! Du er en sand eventurer! Lad os fortsætte vores magiske rejse.',
+      nextChallenge: '$name, hvad kan du opdage nu?',
     );
   }
 

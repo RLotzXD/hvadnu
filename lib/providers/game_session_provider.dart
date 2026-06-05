@@ -203,6 +203,11 @@ class GameSessionNotifier extends StateNotifier<GameState> {
     final session = state.session;
     if (session == null) return;
 
+    final participants = session.config.participants;
+    final fallbackName = participants.isNotEmpty
+        ? participants.first.name
+        : (session.config.language == 'en' ? 'little friend' : 'lille ven');
+
     state = state.copyWith(phase: GamePhase.processing);
 
     try {
@@ -240,7 +245,11 @@ class GameSessionNotifier extends StateNotifier<GameState> {
         state = state.copyWith(phase: GamePhase.listening);
       }
     } catch (e) {
-      final fallback = LLMResponse.fallback(actionType: action.type);
+      final fallback = LLMResponse.fallback(
+        actionType: action.type,
+        participantName: fallbackName,
+        language: session.config.language,
+      );
       await _playNarration(fallback.fullNarration);
       state = state.copyWith(phase: GamePhase.listening);
     }

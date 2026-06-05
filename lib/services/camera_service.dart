@@ -49,8 +49,7 @@ class CameraService {
 
   Future<PlayerAction> capturePhoto() async {
     if (_controller == null || !(_controller!.value.isInitialized)) {
-      // Return a placeholder action if camera not available
-      return PlayerAction.photo('');
+      throw Exception('Kamera er ikke klar endnu');
     }
 
     try {
@@ -60,10 +59,14 @@ class CameraService {
       final compressedBytes = await _compressImage(bytes);
       final base64Image = base64Encode(compressedBytes);
 
+      if (base64Image.isEmpty) {
+        throw Exception('Kunne ikke læse billeddata');
+      }
+
       return PlayerAction.photo(base64Image);
     } catch (e) {
       print('Photo capture error: $e');
-      return PlayerAction.photo('');
+      throw Exception('Kunne ikke tage billede: $e');
     }
   }
 
