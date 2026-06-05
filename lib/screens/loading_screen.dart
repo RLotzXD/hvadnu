@@ -33,6 +33,9 @@ class _LoadingScreenState extends ConsumerState<LoadingScreen> {
 
   Future<void> _initializeApp() async {
     try {
+      // Step 0: Fetch web config (if on web)
+      await ApiConfig.fetchWebConfig();
+
       // Step 1: Check API configuration
       setState(() {
         _statusMessage = 'Tjekker konfiguration...';
