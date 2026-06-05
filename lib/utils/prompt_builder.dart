@@ -37,8 +37,10 @@ ${config.participants.isNotEmpty ? 'IMPORTANT: ALWAYS use the children\'s names 
 When the child sends a photo, you MUST:
 1. ANALYZE the actual image carefully
 2. Identify SPECIFIC objects, colors, shapes, and materials
-3. Mention AT LEAST 3 concrete details from what you see (e.g., "I see a red ball", "there is wood", "the fabric is blue")
-4. ACCEPT everything the child shows - even if it doesn't match exactly, find the magical connection!
+3. INCORPORATE these real objects into the story by name
+4. Use them as magical items, characters, or plot elements
+5. Example: If image shows a red ball + blue toy → "You found a magic red sphere and a mystical blue guardian!"
+The objects in the photo ARE the story elements - NEVER make up different items or ignore the image!
 ${config.participants.length >= 2 ? '\n### TURN-TAKING\nThere are ${config.participants.length} children playing. Each challenge should be directed at ONE specific child. The system will tell you whose turn it is. Start the challenge with that child\'s name!' : ''}
 
 ### CHALLENGE VARIETY - VERY IMPORTANT!
@@ -95,8 +97,10 @@ ${config.participants.isNotEmpty ? 'VIGTIGT: Brug ALTID børnenes navne i hver e
 Når barnet sender et billede, SKAL du:
 1. ANALYSERE det faktiske billede grundigt
 2. Identificere SPECIFIKKE objekter, farver, former og materialer
-3. Nævne MINDST 3 konkrete detaljer fra det, du ser (f.eks. "Jeg ser en rød bold", "der er træ", "stof er blåt")
-4. ACCEPTER alt barnet viser - selv hvis det ikke matcher præcist, finder du den magiske forbindelse!
+3. INKORPORERE disse rigtige objekter i historien ved navn
+4. Brug dem som magiske genstande, karakterer eller plot-elementer
+5. Eksempel: Hvis billedet viser en rød bold + blåt legetøj → "Du fandt en magisk rød kugle og en mystisk blå beskytter!"
+Objekterne på fotoet ER historiens elementer - IGNORÉR ALDRIG billedet eller find på andre ting!
 ${config.participants.length >= 2 ? '\n### TURTAGNING\nDer er ${config.participants.length} børn som spiller. Hver udfordring skal være rettet mod ÉT specifikt barn. Systemet vil sige til dig, hvem sin tur det er. Start udfordringen med det barns navn!' : ''}
 
 ### UDFORDRINGS-VARIATION - MEGET VIGTIGT!
@@ -177,7 +181,17 @@ Du SKAL svare med præcis dette JSON-format:
         }
         buffer.writeln('[Image data attached]');
         buffer.writeln(
-            'CRITICAL: You MUST analyze the actual image attached below. Identify the specific objects, colors, shapes, and materials visible. Mention at least THREE concrete visual details (e.g., "I see a red ball", "there\'s a wooden block", "I notice blue fabric"). Do not guess - only describe what you actually see in the image.');
+            'CRITICAL: You MUST analyze the image and INCORPORATE what you see into your story:');
+        buffer.writeln(
+            '1. Identify SPECIFIC objects visible (colors, materials, shapes)');
+        buffer.writeln(
+            '2. Name these objects explicitly in your story response');
+        buffer.writeln(
+            '3. Build the story around what\'s actually in the image');
+        buffer.writeln(
+            'Example: If you see a red ball, a wooden block, and a blue toy, say: "$currentPlayerName showed me a magical red ball, a wooden treasure chest, and a glowing blue charm!"');
+        buffer.writeln(
+            'NEVER ignore the image or pretend you didn\'t see it. The objects in the image ARE the magical items in the story.');
       } else {
         buffer.writeln('The child said: "$playerInput"');
       }
@@ -222,7 +236,17 @@ Du SKAL svare med præcis dette JSON-format:
         }
         buffer.writeln('[Billeddata er vedlagt]');
         buffer.writeln(
-            'KRITISK: Du SKAL analysere det faktiske billede vedlagt nedenfor. Identificer de specifikke objekter, farver, former og materialer, der er synlige. Nævn mindst TRE konkrete visuelle detaljer (f.eks. "Jeg ser en rød bold", "der er en træklods", "jeg bemærker blåt stof"). Gæt ikke - beskriv kun det, du faktisk kan se på billedet.');
+            'KRITISK: Du SKAL analysere billedet OG INKORPORERE det du ser ind i historien:');
+        buffer.writeln(
+            '1. Identificer SPECIFIKKE objekter som er synlige (farver, materialer, former)');
+        buffer.writeln(
+            '2. Nævn disse objekter eksplicit i din historiereaktion');
+        buffer.writeln(
+            '3. Byg historien omkring det der faktisk er på billedet');
+        buffer.writeln(
+            'Eksempel: Hvis du ser en rød bold, en træklods og et blåt legetøj, sig: "$currentPlayerName viste mig en magisk rød bold, en træ-skattkiste og en glødende blå charm!"');
+        buffer.writeln(
+            'IGNORÉR ALDRIG billedet eller tro at du ikke ser det. Objekterne på billedet ER de magiske genstande i historien.');
       } else {
         buffer.writeln('Barnet sagde: "$playerInput"');
       }
