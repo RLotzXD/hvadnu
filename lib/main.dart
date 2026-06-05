@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'dart:io';
 import 'config/app_theme.dart';
 import 'screens/screens.dart';
 
@@ -14,18 +15,25 @@ Future<void> main() async {
     debugPrint('Warning: Could not load .env file: $e');
   }
 
-  await SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-  ]);
+  // Only apply platform-specific settings on mobile
+  if (!kIsWeb) {
+    try {
+      await SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+      ]);
 
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-      systemNavigationBarColor: AppTheme.primaryDark,
-      systemNavigationBarIconBrightness: Brightness.light,
-    ),
-  );
+      SystemChrome.setSystemUIOverlayStyle(
+        const SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.light,
+          systemNavigationBarColor: AppTheme.primaryDark,
+          systemNavigationBarIconBrightness: Brightness.light,
+        ),
+      );
+    } catch (e) {
+      debugPrint('Could not set platform preferences: $e');
+    }
+  }
 
   runApp(
     const ProviderScope(
@@ -33,6 +41,8 @@ Future<void> main() async {
     ),
   );
 }
+
+const bool kIsWeb = identical(0, 0.0);
 
 class HvadNuApp extends StatelessWidget {
   const HvadNuApp({super.key});
