@@ -32,6 +32,13 @@ ${config.environment.getContextForLLM(lang)}
 ### PARTICIPANTS - ALWAYS USE THEIR NAMES!
 ${config.participants.isEmpty ? 'The child (name unknown - use "you" or "little friend")' : 'Children\'s names: ${config.participantNames}'}
 ${config.participants.isNotEmpty ? 'IMPORTANT: ALWAYS use the children\'s names in every sentence! Say e.g. "${config.participants.first.name}, you are so brave!" or "Well done, ${config.participantNames}!"' : ''}
+
+### IMAGE ANALYSIS - EXTREMELY IMPORTANT!
+When the child sends a photo, you MUST:
+1. ANALYZE the actual image carefully
+2. Identify SPECIFIC objects, colors, shapes, and materials
+3. Mention AT LEAST 3 concrete details from what you see (e.g., "I see a red ball", "there is wood", "the fabric is blue")
+4. ACCEPT everything the child shows - even if it doesn't match exactly, find the magical connection!
 ${config.participants.length >= 2 ? '\n### TURN-TAKING\nThere are ${config.participants.length} children playing. Each challenge should be directed at ONE specific child. The system will tell you whose turn it is. Start the challenge with that child\'s name!' : ''}
 
 ### CHALLENGE VARIETY - VERY IMPORTANT!
@@ -84,6 +91,14 @@ ${config.environment.getContextForLLM(lang)}
 ${config.participants.isEmpty ? 'Barnet (navn ukendt - brug "du" eller "lille ven")' : 'Børnenes navne: ${config.participantNames}'}
 ${config.participants.isNotEmpty ? 'VIGTIGT: Brug ALTID børnenes navne i hver eneste sætning! Sig f.eks. "${config.participants.first.name}, du er så modig!" eller "Godt klaret, ${config.participantNames}!"' : ''}
 
+### BILLEDANALYSE - EKSTREM VIGTIG!
+Når barnet sender et billede, SKAL du:
+1. ANALYSERE det faktiske billede grundigt
+2. Identificere SPECIFIKKE objekter, farver, former og materialer
+3. Nævne MINDST 3 konkrete detaljer fra det, du ser (f.eks. "Jeg ser en rød bold", "der er træ", "stof er blåt")
+4. ACCEPTER alt barnet viser - selv hvis det ikke matcher præcist, finder du den magiske forbindelse!
+${config.participants.length >= 2 ? '\n### TURTAGNING\nDer er ${config.participants.length} børn som spiller. Hver udfordring skal være rettet mod ÉT specifikt barn. Systemet vil sige til dig, hvem sin tur det er. Start udfordringen med det barns navn!' : ''}
+
 ### UDFORDRINGS-VARIATION - MEGET VIGTIGT!
 Gentag ALDRIG lignende udfordringstyper! Roter gennem disse kategorier:
 ${_getChallengeVarietyGuide(config.theme, 'da')}
@@ -120,6 +135,15 @@ Du SKAL svare med præcis dette JSON-format:
     final participants = session.config.participants;
     final buffer = StringBuffer();
 
+    // Calculate whose turn just finished (the current player)
+    String? currentPlayerName;
+    if (participants.isNotEmpty) {
+      final currentPlayerIndex = participants.length >= 2
+          ? session.storyState.currentStep % participants.length
+          : 0;
+      currentPlayerName = participants[currentPlayerIndex].name;
+    }
+
     // Calculate whose turn is next (for the new challenge)
     String? nextPlayerName;
     if (participants.isNotEmpty) {
@@ -146,10 +170,14 @@ Du SKAL svare med præcis dette JSON-format:
 
       buffer.writeln('### CHILD\'S RESPONSE');
       if (inputType == 'photo') {
-        buffer.writeln('The child has taken a picture of something.');
+        if (currentPlayerName != null) {
+          buffer.writeln('$currentPlayerName has taken a picture of something.');
+        } else {
+          buffer.writeln('The child has taken a picture of something.');
+        }
         buffer.writeln('[Image data attached]');
         buffer.writeln(
-            'IMPORTANT: Analyze the ACTUAL attached image and mention at least one concrete detail (object, color, shape, or material) from what you can see.');
+            'CRITICAL: You MUST analyze the actual image attached below. Identify the specific objects, colors, shapes, and materials visible. Mention at least THREE concrete visual details (e.g., "I see a red ball", "there\'s a wooden block", "I notice blue fabric"). Do not guess - only describe what you actually see in the image.');
       } else {
         buffer.writeln('The child said: "$playerInput"');
       }
@@ -187,10 +215,14 @@ Du SKAL svare med præcis dette JSON-format:
 
       buffer.writeln('### BARNETS SVAR');
       if (inputType == 'photo') {
-        buffer.writeln('Barnet har taget et billede af noget.');
+        if (currentPlayerName != null) {
+          buffer.writeln('$currentPlayerName har taget et billede af noget.');
+        } else {
+          buffer.writeln('Barnet har taget et billede af noget.');
+        }
         buffer.writeln('[Billeddata er vedlagt]');
         buffer.writeln(
-            'VIGTIGT: Analyser det faktiske vedlagte billede og nævn mindst én konkret detalje (genstand, farve, form eller materiale) fra det, du kan se.');
+            'KRITISK: Du SKAL analysere det faktiske billede vedlagt nedenfor. Identificer de specifikke objekter, farver, former og materialer, der er synlige. Nævn mindst TRE konkrete visuelle detaljer (f.eks. "Jeg ser en rød bold", "der er en træklods", "jeg bemærker blåt stof"). Gæt ikke - beskriv kun det, du faktisk kan se på billedet.');
       } else {
         buffer.writeln('Barnet sagde: "$playerInput"');
       }
