@@ -148,6 +148,9 @@ Du SKAL svare med præcis dette JSON-format:
       currentPlayerName = participants[currentPlayerIndex].name;
     }
 
+    // Ensure we always have a name for responses
+    currentPlayerName ??= (isEnglish ? 'little friend' : 'lille ven');
+
     // Calculate whose turn is next (for the new challenge)
     String? nextPlayerName;
     if (participants.isNotEmpty) {
@@ -174,11 +177,7 @@ Du SKAL svare med præcis dette JSON-format:
 
       buffer.writeln('### CHILD\'S RESPONSE');
       if (inputType == 'photo') {
-        if (currentPlayerName != null) {
-          buffer.writeln('$currentPlayerName has taken a picture of something.');
-        } else {
-          buffer.writeln('The child has taken a picture of something.');
-        }
+        buffer.writeln('$currentPlayerName has taken a picture of something.');
         buffer.writeln('[Image data attached]');
         buffer.writeln(
             'CRITICAL: You MUST analyze the image and INCORPORATE what you see into your story:');
@@ -229,11 +228,7 @@ Du SKAL svare med præcis dette JSON-format:
 
       buffer.writeln('### BARNETS SVAR');
       if (inputType == 'photo') {
-        if (currentPlayerName != null) {
-          buffer.writeln('$currentPlayerName har taget et billede af noget.');
-        } else {
-          buffer.writeln('Barnet har taget et billede af noget.');
-        }
+        buffer.writeln('$currentPlayerName har taget et billede af noget.');
         buffer.writeln('[Billeddata er vedlagt]');
         buffer.writeln(
             'KRITISK: Du SKAL analysere billedet OG INKORPORERE det du ser ind i historien:');
