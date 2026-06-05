@@ -1,17 +1,6 @@
 {
-  "version": 2,
-  "public": true,
-  "builds": [
-    {
-      "src": "public/**",
-      "use": "@vercel/static"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/index.html",
-      "status": 200
-    }
-  ]
+  "buildCommand": "echo 'Using pre-built web files'",
+  "outputDirectory": "public",
+  "cleanUrls": true,
+  "trailingSlash": false
 }
