@@ -62,12 +62,16 @@ class _LoadingScreenState extends ConsumerState<LoadingScreen> {
         ref.read(parentConfigProvider.notifier).loadConfig(lastConfig);
       }
 
-      // Step 4: Initialize camera
+      // Step 4: Initialize camera (skip on web)
       setState(() {
         _statusMessage = 'Starter kameraet...';
         _progress = 0.8;
       });
-      await ref.read(gameSessionProvider.notifier).initializeServices();
+
+      // Only initialize camera on mobile platforms
+      if (!_isWeb()) {
+        await ref.read(gameSessionProvider.notifier).initializeServices();
+      }
 
       // Step 5: Ready
       setState(() {
@@ -243,5 +247,9 @@ class _LoadingScreenState extends ConsumerState<LoadingScreen> {
         foregroundColor: AppTheme.primaryDark,
       ),
     );
+  }
+
+  bool _isWeb() {
+    return identical(0, 0.0);
   }
 }
