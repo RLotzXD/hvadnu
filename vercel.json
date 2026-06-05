@@ -1,5 +1,5 @@
 {
-  "buildCommand": "bash build.sh",
+  "buildCommand": "node build.js",
   "outputDirectory": "public",
   "cleanUrls": true,
   "trailingSlash": false
