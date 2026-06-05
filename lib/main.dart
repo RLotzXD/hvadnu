@@ -9,10 +9,13 @@ import 'screens/screens.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  try {
-    await dotenv.load(fileName: '.env');
-  } catch (e) {
-    debugPrint('Warning: Could not load .env file: $e');
+  // Only load .env file on mobile (not on web)
+  if (!kIsWeb) {
+    try {
+      await dotenv.load(fileName: '.env');
+    } catch (e) {
+      debugPrint('Warning: Could not load .env file: $e');
+    }
   }
 
   // Only apply platform-specific settings on mobile
