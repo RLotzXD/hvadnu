@@ -113,11 +113,26 @@ function buildWeb() {
 function injectApiConfig() {
   step('Injecting window.apiConfig');
 
-  const gemini = process.env.GEMINI_API_KEY || '';
-  const elevenLabs = process.env.ELEVENLABS_API_KEY || '';
+  // Trim, because a key pasted into the Vercel dashboard with a trailing
+  // newline or space is still "set" but produces 401 invalid_api_key at
+  // runtime — which looks like a code bug from inside the app.
+  const geminiRaw = process.env.GEMINI_API_KEY || '';
+  const elevenLabsRaw = process.env.ELEVENLABS_API_KEY || '';
+  const gemini = geminiRaw.trim().replace(/^["']|["']$/g, '');
+  const elevenLabs = elevenLabsRaw.trim().replace(/^["']|["']$/g, '');
 
-  console.log(`GEMINI_API_KEY: ${gemini ? 'set' : 'MISSING'}`);
-  console.log(`ELEVENLABS_API_KEY: ${elevenLabs ? 'set' : 'MISSING'}`);
+  // Fingerprint rather than the value: enough to spot a truncated or
+  // mis-pasted key against the local .env, without printing a secret into a
+  // build log that anyone on the team can read.
+  const describe = (name, cleaned, raw) => {
+    if (!cleaned) return `${name}: MISSING`;
+    const trimmedNote = cleaned === raw ? '' : ' (had surrounding whitespace/quotes — trimmed)';
+    return `${name}: length=${cleaned.length} ends=${cleaned.slice(-3)}${trimmedNote}`;
+  };
+
+  console.log(describe('GEMINI_API_KEY', gemini, geminiRaw));
+  console.log(describe('ELEVENLABS_API_KEY', elevenLabs, elevenLabsRaw));
+
   if (!gemini || !elevenLabs) {
     console.warn(
       'WARNING: the site will build but stop at the configuration screen. ' +
