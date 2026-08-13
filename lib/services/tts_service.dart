@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -141,30 +142,31 @@ class TTSService {
     if (e is DioException) {
       final status = e.response?.statusCode;
 
-      // 402 is quota_exceeded: the ElevenLabs account is out of credits. Dio's
-      // built-in description for 402 says "bad syntax", which sends you looking
-      // for a code bug that isn't there. Say what it actually means.
-      if (status == 402) {
-        ErrorHandler.log(
-          'TTSService.$where',
-          'ElevenLabs returned 402 (quota_exceeded) — the account is out of '
-              'credits, so there will be no narration until it is topped up. '
-              'Check the Subscription page at elevenlabs.io. This is a billing '
-              'state, not a bug.',
-        );
-        return const TtsException(
-          message: 'ElevenLabs quota exhausted (HTTP 402)',
-          userFriendlyMessage: 'Fortælleren har mistet stemmen. Tjek ElevenLabs-kontoen.',
-          userFriendlyMessageEn: 'The storyteller has lost their voice. Check the ElevenLabs account.',
-        );
-      }
-
-      ErrorHandler.log('TTSService.$where', e, stackTrace);
+      // ElevenLabs puts the real reason in the body as detail.status — things
+      // like quota_exceeded, detected_unusual_activity, voice_not_found or
+      // max_character_limit_exceeded. Dio's own description is useless here
+      // (it calls 402 "bad syntax"), and without the body every failure looks
+      // identical. responseType is bytes for this endpoint, so decode it.
+      ErrorHandler.log(
+        'TTSService.$where',
+        'ElevenLabs HTTP $status — ${_describeBody(e.response?.data)}',
+      );
       return ErrorHandler.toAppException(e, context: 'text-to-speech');
     }
 
     ErrorHandler.log('TTSService.$where', e, stackTrace);
     return TtsException(message: 'Playback failed in $where: $e', originalError: e);
+  }
+
+  /// The error body arrives as raw bytes because the request asks for audio.
+  static String _describeBody(dynamic data) {
+    if (data == null) return 'no response body';
+    try {
+      if (data is List<int>) return utf8.decode(data);
+      return data.toString();
+    } catch (_) {
+      return 'unreadable response body';
+    }
   }
 
   /// Plays [bytes] and returns once playback has finished.

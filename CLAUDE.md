@@ -225,7 +225,20 @@ controller, and `ThemedViewfinder` must tolerate that.
 
 1. Add the profile + ElevenLabs voice ID in `lib/config/narrator_profiles.dart`.
 2. It flows automatically through `ParentConfig.elevenLabsVoiceId` into `TTSService`.
-3. Verify the voice actually supports the target language.
+3. **The voice must be `premade`.** On a free ElevenLabs plan, *library* (community)
+   voices return 402 `paid_plan_required` through the API — "Free users cannot use library
+   voices via the API" — even though they work fine on the ElevenLabs website and the
+   credit balance is untouched. Narration then fails silently. Check the ID first:
+
+   ```bash
+   KEY=$(grep '^ELEVENLABS_API_KEY=' .env | cut -d= -f2-)
+   curl -s -H "xi-api-key: $KEY" https://api.elevenlabs.io/v1/voices \
+     | python3 -c "import sys,json;[print(v['voice_id'], v['name'], v.get('category')) for v in json.load(sys.stdin)['voices']]"
+   ```
+
+   IDs are also reused across renames — `EXAVITQu4vr4xnSDxMaL` was Bella and is now Sarah,
+   so don't trust the name in a comment.
+4. Verify the voice actually supports the target language.
 
 ### Debugging API Issues
 

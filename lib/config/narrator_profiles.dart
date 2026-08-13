@@ -52,14 +52,27 @@ extension NarratorProfileExtension on NarratorProfile {
     }
   }
 
+  /// ElevenLabs voice for this narrator.
+  ///
+  /// These must all be **premade** voices. A free ElevenLabs plan cannot use
+  /// *library* (community) voices through the API — the request comes back
+  /// 402 `paid_plan_required`, "Free users cannot use library voices via the
+  /// API", and the child hears nothing. The old Sea Captain voice (Josh,
+  /// `TxGEqnHWrfWFTfGW9XjX`) was a library voice and failed exactly this way,
+  /// silently, on every platform.
+  ///
+  /// Before changing any of these, confirm the ID appears in
+  /// `GET https://api.elevenlabs.io/v1/voices` for the account whose key is in
+  /// `.env`, with category `premade`. Note that ElevenLabs reuses IDs across
+  /// renames: `EXAVITQu4vr4xnSDxMaL` was Bella and is now Sarah.
   String get elevenLabsVoiceId {
     switch (this) {
       case NarratorProfile.wiseWizard:
-        return 'pNInz6obpgDQGcFmaJgB'; // Adam
+        return 'pqHfZKP75CvOlQylNhV4'; // Bill — wise, mature, balanced
       case NarratorProfile.oldSeaCaptain:
-        return 'TxGEqnHWrfWFTfGW9XjX'; // Josh
+        return 'JBFqnCBsd6RMkjVDRZzb'; // George — warm, captivating storyteller
       case NarratorProfile.friendlyRobot:
-        return 'EXAVITQu4vr4xnSDxMaL'; // Bella
+        return 'FGY2WhTYpPnrIDTdsKH5'; // Laura — enthusiastic, quirky
     }
   }
 
