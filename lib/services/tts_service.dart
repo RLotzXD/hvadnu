@@ -65,15 +65,6 @@ class TTSService {
       final audioBytes = response.data as List<int>;
       await _playAudioBytes(Uint8List.fromList(audioBytes));
 
-      await _audioPlayer.playerStateStream
-          .firstWhere((state) =>
-              state.processingState == ProcessingState.completed ||
-              state.processingState == ProcessingState.idle)
-          .timeout(
-            const Duration(minutes: 2),
-            onTimeout: () => _audioPlayer.playerState,
-          );
-
       _isPlaying = false;
       onComplete?.call();
     } catch (e, stackTrace) {
@@ -134,14 +125,6 @@ class TTSService {
         await _playAudioBytes(Uint8List.fromList(audioChunks));
       }
 
-      await _audioPlayer.playerStateStream
-          .firstWhere((state) =>
-              state.processingState == ProcessingState.completed)
-          .timeout(
-            const Duration(minutes: 2),
-            onTimeout: () => _audioPlayer.playerState,
-          );
-
       _isPlaying = false;
       onComplete?.call();
     } catch (e, stackTrace) {
@@ -155,17 +138,57 @@ class TTSService {
   /// to catch this and continue in silence. It is thrown rather than swallowed
   /// so the failure is at least visible to the caller and the logs.
   AppException _asTtsException(Object e, StackTrace stackTrace, String where) {
-    ErrorHandler.log('TTSService.$where', e, stackTrace);
     if (e is DioException) {
+      final status = e.response?.statusCode;
+
+      // 402 is quota_exceeded: the ElevenLabs account is out of credits. Dio's
+      // built-in description for 402 says "bad syntax", which sends you looking
+      // for a code bug that isn't there. Say what it actually means.
+      if (status == 402) {
+        ErrorHandler.log(
+          'TTSService.$where',
+          'ElevenLabs returned 402 (quota_exceeded) — the account is out of '
+              'credits, so there will be no narration until it is topped up. '
+              'Check the Subscription page at elevenlabs.io. This is a billing '
+              'state, not a bug.',
+        );
+        return const TtsException(
+          message: 'ElevenLabs quota exhausted (HTTP 402)',
+          userFriendlyMessage: 'Fortælleren har mistet stemmen. Tjek ElevenLabs-kontoen.',
+          userFriendlyMessageEn: 'The storyteller has lost their voice. Check the ElevenLabs account.',
+        );
+      }
+
+      ErrorHandler.log('TTSService.$where', e, stackTrace);
       return ErrorHandler.toAppException(e, context: 'text-to-speech');
     }
+
+    ErrorHandler.log('TTSService.$where', e, stackTrace);
     return TtsException(message: 'Playback failed in $where: $e', originalError: e);
   }
 
+  /// Plays [bytes] and returns once playback has finished.
+  ///
+  /// The wait is bounded by the clip's own length plus a margin. This matters
+  /// on the web: browsers block audio that isn't tied to a user gesture, and
+  /// when that happens playback never reports completion. The old code waited
+  /// two minutes for a completion event that would never arrive, which left
+  /// `GamePhase.narrating` stuck and made the action button inert — the game
+  /// looked frozen rather than merely silent.
   Future<void> _playAudioBytes(Uint8List bytes) async {
-    final audioSource = _BytesAudioSource(bytes);
-    await _audioPlayer.setAudioSource(audioSource);
-    await _audioPlayer.play();
+    final clipLength = await _audioPlayer.setAudioSource(_BytesAudioSource(bytes));
+    final limit = (clipLength ?? const Duration(seconds: 20)) +
+        const Duration(seconds: 5);
+
+    // just_audio's play() completes when playback ends, pauses or stops.
+    await _audioPlayer.play().timeout(limit, onTimeout: () {
+      ErrorHandler.log(
+        'TTSService',
+        'Playback did not finish within $limit — continuing without audio. '
+            'On web this usually means the browser blocked autoplay.',
+      );
+      return _audioPlayer.stop();
+    });
   }
 
   Future<void> stop() async {
