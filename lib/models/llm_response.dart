@@ -82,7 +82,7 @@ class LLMResponse {
     required String theme,
     required String storyContext,
   }) {
-    return LLMResponse(
+    return const LLMResponse(
       validationSuccess: true,
       storySegment:
           'FANTASTISK! Du har gjort det! Du har gennemført hele eventyret og reddet alle! Du er en SAND HELT!',

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../config/app_theme.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../config/api_config.dart';
+import '../config/app_theme.dart';
 import '../providers/providers.dart';
+import '../utils/error_handler.dart';
+import '../utils/exceptions.dart';
 
 class LoadingScreen extends ConsumerStatefulWidget {
   final VoidCallback onReady;
@@ -33,61 +36,56 @@ class _LoadingScreenState extends ConsumerState<LoadingScreen> {
 
   Future<void> _initializeApp() async {
     try {
-      // Step 1: Check API configuration
-      setState(() {
-        _statusMessage = 'Tjekker konfiguration...';
-        _progress = 0.2;
-      });
+      _setStatus('Tjekker konfiguration...', 0.25);
       await Future.delayed(const Duration(milliseconds: 300));
 
       if (!ApiConfig.isConfigured) {
-        throw Exception('API nøgler mangler i .env filen');
+        throw const AppException(
+          message: 'GEMINI_API_KEY or ELEVENLABS_API_KEY missing',
+          userFriendlyMessage:
+              'API-nøglerne mangler. Tjek .env filen (eller servermiljøet på web).',
+          userFriendlyMessageEn:
+              'API keys are missing. Check the .env file (or the server env on web).',
+        );
       }
 
-      // Step 2: Initialize storage
-      setState(() {
-        _statusMessage = 'Indlæser gemte eventyr...';
-        _progress = 0.4;
-      });
+      _setStatus('Indlæser gemte eventyr...', 0.5);
       final storage = ref.read(sessionStorageProvider);
       await storage.initialize();
 
-      // Step 3: Load last config if exists
-      setState(() {
-        _statusMessage = 'Finder dine indstillinger...';
-        _progress = 0.6;
-      });
+      _setStatus('Finder dine indstillinger...', 0.75);
       final lastConfig = await storage.loadLastConfig();
       if (lastConfig != null) {
         ref.read(parentConfigProvider.notifier).loadConfig(lastConfig);
       }
 
-      // Step 4: Initialize camera (skip on web)
-      setState(() {
-        _statusMessage = 'Starter kameraet...';
-        _progress = 0.8;
-      });
+      // Camera and microphone are deliberately NOT initialised here — doing so
+      // fires the OS permission prompts before PermissionsScreen has explained
+      // why we need them. AdventureStartScreen initialises them instead.
 
-      // Only initialize camera on mobile platforms
-      if (!_isWeb()) {
-        await ref.read(gameSessionProvider.notifier).initializeServices();
-      }
-
-      // Step 5: Ready
-      setState(() {
-        _statusMessage = 'Klar til eventyr!';
-        _progress = 1.0;
-      });
+      _setStatus('Klar til eventyr!', 1.0);
       await Future.delayed(const Duration(milliseconds: 500));
 
+      if (!mounted) return;
       widget.onReady();
-    } catch (e) {
+    } catch (e, stackTrace) {
+      ErrorHandler.log('LoadingScreen.initialize', e, stackTrace);
+      if (!mounted) return;
       setState(() {
         _hasError = true;
-        _errorMessage = e.toString();
+        _errorMessage = ErrorHandler.describe(e);
         _statusMessage = 'Noget gik galt...';
       });
+      widget.onError();
     }
+  }
+
+  void _setStatus(String message, double progress) {
+    if (!mounted) return;
+    setState(() {
+      _statusMessage = message;
+      _progress = progress;
+    });
   }
 
   @override
@@ -232,6 +230,9 @@ class _LoadingScreenState extends ConsumerState<LoadingScreen> {
   Widget _buildRetryButton() {
     return ElevatedButton.icon(
       onPressed: () {
+        // Drop any cached credentials, otherwise a first-run miss is
+        // permanent for the process and retrying can never succeed.
+        ApiConfig.resetCache();
         setState(() {
           _hasError = false;
           _errorMessage = null;
@@ -247,9 +248,5 @@ class _LoadingScreenState extends ConsumerState<LoadingScreen> {
         foregroundColor: AppTheme.primaryDark,
       ),
     );
-  }
-
-  bool _isWeb() {
-    return identical(0, 0.0);
   }
 }

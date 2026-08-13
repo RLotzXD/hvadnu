@@ -23,7 +23,7 @@ The child ALWAYS does the right thing. If they show you something that doesn't e
 ### YOUR CHARACTER
 ${config.narrator.getVoiceStylePrompt(lang)}
 
-### THEME & UNIVERSE
+### THEME & UNIVERSE: ${config.theme.getDisplayName(lang)}
 ${config.theme.getSystemPromptAddition(lang)}
 
 ### PHYSICAL ENVIRONMENT
@@ -83,7 +83,7 @@ Barnet gør ALTID det rigtige. Hvis de viser dig noget, der ikke præcis matcher
 ### DIN KARAKTER
 ${config.narrator.getVoiceStylePrompt(lang)}
 
-### TEMA & UNIVERS
+### TEMA & UNIVERS: ${config.theme.getDisplayName(lang)}
 ${config.theme.getSystemPromptAddition(lang)}
 
 ### FYSISK MILJØ
@@ -136,29 +136,13 @@ Du SKAL svare med præcis dette JSON-format:
     required String inputType,
   }) {
     final isEnglish = session.config.language == 'en';
-    final participants = session.config.participants;
     final buffer = StringBuffer();
 
-    // Calculate whose turn just finished (the current player)
-    String? currentPlayerName;
-    if (participants.isNotEmpty) {
-      final currentPlayerIndex = participants.length >= 2
-          ? session.storyState.currentStep % participants.length
-          : 0;
-      currentPlayerName = participants[currentPlayerIndex].name;
-    }
-
-    // Ensure we always have a name for responses
-    currentPlayerName ??= (isEnglish ? 'little friend' : 'lille ven');
-
-    // Calculate whose turn is next (for the new challenge)
-    String? nextPlayerName;
-    if (participants.isNotEmpty) {
-      final nextPlayerIndex = participants.length >= 2
-          ? (session.storyState.currentStep + 1) % participants.length
-          : 0;
-      nextPlayerName = participants[nextPlayerIndex].name;
-    }
+    // GameSession owns turn rotation so the prompt and the on-screen "your
+    // turn" badge can never disagree.
+    final currentPlayerName = session.currentPlayer?.name ??
+        (isEnglish ? 'little friend' : 'lille ven');
+    final nextPlayerName = session.nextPlayer?.name;
 
     if (isEnglish) {
       buffer.writeln('### CURRENT GAME STATE');

@@ -4,7 +4,9 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  # 3.3 is the floor for `dart:js_interop`, used by lib/config/api_config_web.dart
+  # to read the API keys injected into window.apiConfig on web.
+  sdk: '>=3.3.0 <4.0.0'
 
 dependencies:
   flutter:
@@ -46,6 +48,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.1
+  mocktail: ^1.0.4
   build_runner: ^2.4.8
   hive_generator: ^2.0.1
   riverpod_generator: ^2.3.9

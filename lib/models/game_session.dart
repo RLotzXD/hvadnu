@@ -48,6 +48,29 @@ class GameSession {
     return remaining.isNegative ? Duration.zero : remaining;
   }
 
+  // ---------------------------------------------------------- Turn taking
+
+  /// True when turns rotate between children rather than one child playing
+  /// the whole adventure.
+  bool get isMultiplayer => config.participants.length >= 2;
+
+  /// The child whose turn it is right now, or null if nobody was named.
+  ///
+  /// Single source of truth for turn rotation — `PromptBuilder` tells Gemini
+  /// whose turn it is and `PlayerScreen` shows the same name, so they must
+  /// agree. Don't recompute `currentStep % participants.length` inline.
+  Participant? get currentPlayer => _playerAt(storyState.currentStep);
+
+  /// The child who gets the next challenge, i.e. after this turn resolves.
+  Participant? get nextPlayer => _playerAt(storyState.currentStep + 1);
+
+  Participant? _playerAt(int step) {
+    final participants = config.participants;
+    if (participants.isEmpty) return null;
+    if (!isMultiplayer) return participants.first;
+    return participants[step % participants.length];
+  }
+
   GameSession copyWith({
     String? id,
     ParentConfig? config,

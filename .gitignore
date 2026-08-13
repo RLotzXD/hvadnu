@@ -26,7 +26,10 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
-!/build/web/
+
+# Vercel regenerates this from source via build.js on every deploy, and the
+# built index.html carries the injected API keys — it must never be committed.
+/public/
 
 # Symbolication related
 app.*.symbols

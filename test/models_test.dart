@@ -209,7 +209,7 @@ void main() {
     });
 
     test('fullNarration combines segments correctly', () {
-      final response = LLMResponse(
+      const response = LLMResponse(
         validationSuccess: true,
         storySegment: 'Du fandt det!',
         nextChallenge: 'Find nu noget rundt.',

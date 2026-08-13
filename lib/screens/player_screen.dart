@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:camera/camera.dart';
+
 import '../config/app_theme.dart';
+import '../models/models.dart';
 import '../providers/providers.dart';
-import '../widgets/themed_viewfinder.dart';
+import '../services/haptic_service.dart';
+import '../utils/error_handler.dart';
 import '../widgets/action_button.dart';
 import '../widgets/processing_overlay.dart';
+import '../widgets/themed_viewfinder.dart';
 import 'victory_screen.dart';
 
 class PlayerScreen extends ConsumerStatefulWidget {
@@ -40,11 +43,26 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     final cameraService = ref.watch(cameraServiceProvider);
 
     ref.listen<GameState>(gameSessionProvider, (previous, next) {
-      if ((next.phase == GamePhase.victory || next.phase == GamePhase.timeExpired) && context.mounted) {
+      if (!context.mounted) return;
+
+      final finished = next.phase == GamePhase.victory ||
+          next.phase == GamePhase.timeExpired;
+      if (finished) {
+        if (next.phase == GamePhase.victory) HapticService.victory();
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (_) => const VictoryScreen(),
-          ),
+          MaterialPageRoute(builder: (_) => const VictoryScreen()),
+        );
+        return;
+      }
+
+      // Errors were previously stored on the state and never shown to anyone.
+      final message = next.errorMessage;
+      if (message != null && message != previous?.errorMessage) {
+        HapticService.error();
+        ErrorHandler.showErrorSnackbar(
+          context,
+          message,
+          language: next.session?.config.language ?? 'da',
         );
       }
     });
@@ -76,6 +94,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
               Column(
                 children: [
                   _buildProgressBar(session),
+                  _buildTurnBadge(session, gameState.phase),
                   Expanded(
                     child: Padding(
                       padding: const EdgeInsets.all(16),
@@ -125,10 +144,55 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
     );
   }
 
-  Widget _buildProgressBar(dynamic session) {
-    final progress = session.progress as double;
-    final current = session.storyState.currentStep as int;
-    final max = session.config.maxSteps as int;
+  /// Shows whose turn it is when more than one child is playing. The name
+  /// comes from `GameSession.currentPlayer`, the same source `PromptBuilder`
+  /// uses, so the badge can't contradict the narrator.
+  Widget _buildTurnBadge(GameSession session, GamePhase phase) {
+    final player = session.currentPlayer;
+    if (!session.isMultiplayer || player == null) {
+      return const SizedBox.shrink();
+    }
+
+    final isEnglish = session.config.language == 'en';
+    final label = isEnglish ? "${player.name}'s turn" : 'Det er ${player.name}s tur';
+    final accent = AppTheme.getThemeAccentColor(session.config.theme.name);
+    final isActive = phase == GamePhase.listening || phase == GamePhase.recording;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: AnimatedOpacity(
+        opacity: isActive ? 1.0 : 0.45,
+        duration: const Duration(milliseconds: 250),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+          decoration: BoxDecoration(
+            color: accent.withOpacity(0.18),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: accent.withOpacity(0.6), width: 2),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.person, size: 18, color: accent),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: accent,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProgressBar(GameSession session) {
+    final current = session.storyState.currentStep;
+    final max = session.config.maxSteps;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
@@ -161,26 +225,21 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
   }
 
   void _handleTap() {
-    final phase = ref.read(gameSessionProvider).phase;
-    if (phase == GamePhase.listening) {
-      ref.read(gameSessionProvider.notifier).capturePhoto();
-    }
+    if (ref.read(gameSessionProvider).phase != GamePhase.listening) return;
+    HapticService.photoCapture();
+    ref.read(gameSessionProvider.notifier).capturePhoto();
   }
 
   void _handleLongPressStart() {
-    final phase = ref.read(gameSessionProvider).phase;
-    if (phase == GamePhase.listening) {
-      HapticFeedback.mediumImpact();
-      ref.read(gameSessionProvider.notifier).startRecording();
-    }
+    if (ref.read(gameSessionProvider).phase != GamePhase.listening) return;
+    HapticService.recordingStart();
+    ref.read(gameSessionProvider.notifier).startRecording();
   }
 
   void _handleLongPressEnd() {
-    final phase = ref.read(gameSessionProvider).phase;
-    if (phase == GamePhase.recording) {
-      HapticFeedback.lightImpact();
-      ref.read(gameSessionProvider.notifier).stopRecording();
-    }
+    if (ref.read(gameSessionProvider).phase != GamePhase.recording) return;
+    HapticService.recordingStop();
+    ref.read(gameSessionProvider.notifier).stopRecording();
   }
 
   void _showExitDialog() {
@@ -207,6 +266,7 @@ class _PlayerScreenState extends ConsumerState<PlayerScreen> {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
+              HapticService.mediumTap();
               ref.read(gameSessionProvider.notifier).endGame();
             },
             child: const Text(

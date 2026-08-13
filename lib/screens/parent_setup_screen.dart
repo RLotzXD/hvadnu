@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../config/story_themes.dart';
+
+import '../config/app_theme.dart';
 import '../config/environment_config.dart';
 import '../config/narrator_profiles.dart';
-import '../config/app_theme.dart';
+import '../config/story_themes.dart';
 import '../providers/providers.dart';
+import '../services/haptic_service.dart';
 import 'adventure_start_screen.dart';
 
 class ParentSetupScreen extends ConsumerStatefulWidget {
@@ -25,10 +27,18 @@ class _ParentSetupScreenState extends ConsumerState<ParentSetupScreen> {
 
   void _addParticipant() {
     final name = _participantController.text.trim();
-    if (name.isNotEmpty) {
-      ref.read(parentConfigProvider.notifier).addParticipant(name);
-      _participantController.clear();
-    }
+    if (name.isEmpty) return;
+
+    HapticService.lightTap();
+    ref.read(parentConfigProvider.notifier).addParticipant(name);
+    _participantController.clear();
+  }
+
+  /// Every setup choice gives the same selection tick, so a parent tapping
+  /// through the form gets consistent feedback.
+  void _select(VoidCallback apply) {
+    HapticService.selectionChanged();
+    apply();
   }
 
   @override
@@ -115,7 +125,8 @@ class _ParentSetupScreenState extends ConsumerState<ParentSetupScreen> {
   Widget _buildLanguageButton(String label, String langCode, String currentLang) {
     final isSelected = currentLang == langCode;
     return GestureDetector(
-      onTap: () => ref.read(parentConfigProvider.notifier).setLanguage(langCode),
+      onTap: () => _select(
+          () => ref.read(parentConfigProvider.notifier).setLanguage(langCode)),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         decoration: BoxDecoration(
@@ -191,9 +202,9 @@ class _ParentSetupScreenState extends ConsumerState<ParentSetupScreen> {
                   size: 18,
                   color: AppTheme.primaryDark,
                 ),
-                onDeleted: () => ref
+                onDeleted: () => _select(() => ref
                     .read(parentConfigProvider.notifier)
-                    .removeParticipant(participant.id),
+                    .removeParticipant(participant.id)),
               );
             }).toList(),
           ),
@@ -213,7 +224,9 @@ class _ParentSetupScreenState extends ConsumerState<ParentSetupScreen> {
       children: [
         _buildSectionTitle(context, isEnglish ? 'Choose the adventure' : 'Vælg eventyret'),
         SizedBox(
-          height: 120,
+          // 120 clipped the label by 10px once a theme name wrapped to two
+          // lines ("Pirateventyret"), which Flutter reports as an overflow.
+          height: 148,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             itemCount: StoryTheme.values.length,
@@ -222,8 +235,8 @@ class _ParentSetupScreenState extends ConsumerState<ParentSetupScreen> {
               final theme = StoryTheme.values[index];
               final isSelected = config.theme == theme;
               return GestureDetector(
-                onTap: () =>
-                    ref.read(parentConfigProvider.notifier).setTheme(theme),
+                onTap: () => _select(() =>
+                    ref.read(parentConfigProvider.notifier).setTheme(theme)),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   width: 140,
@@ -242,22 +255,28 @@ class _ParentSetupScreenState extends ConsumerState<ParentSetupScreen> {
                   ),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         theme.emoji,
                         style: const TextStyle(fontSize: 32),
                       ),
                       const SizedBox(height: 8),
-                      Text(
-                        theme.getDisplayName(config.language),
-                        style: TextStyle(
-                          color: isSelected
-                              ? AppTheme.textLight
-                              : AppTheme.textMuted,
-                          fontWeight:
-                              isSelected ? FontWeight.bold : FontWeight.normal,
+                      Flexible(
+                        child: Text(
+                          theme.getDisplayName(config.language),
+                          style: TextStyle(
+                            color: isSelected
+                                ? AppTheme.textLight
+                                : AppTheme.textMuted,
+                            fontWeight: isSelected
+                                ? FontWeight.bold
+                                : FontWeight.normal,
+                          ),
+                          textAlign: TextAlign.center,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        textAlign: TextAlign.center,
                       ),
                     ],
                   ),
@@ -286,8 +305,8 @@ class _ParentSetupScreenState extends ConsumerState<ParentSetupScreen> {
           children: Environment.values.map((env) {
             final isSelected = config.environment == env;
             return GestureDetector(
-              onTap: () =>
-                  ref.read(parentConfigProvider.notifier).setEnvironment(env),
+              onTap: () => _select(() =>
+                  ref.read(parentConfigProvider.notifier).setEnvironment(env)),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 padding:
@@ -340,8 +359,8 @@ class _ParentSetupScreenState extends ConsumerState<ParentSetupScreen> {
         ...NarratorProfile.values.map((narrator) {
           final isSelected = config.narrator == narrator;
           return GestureDetector(
-            onTap: () =>
-                ref.read(parentConfigProvider.notifier).setNarrator(narrator),
+            onTap: () => _select(() =>
+                ref.read(parentConfigProvider.notifier).setNarrator(narrator)),
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               margin: const EdgeInsets.only(bottom: 8),
@@ -416,8 +435,8 @@ class _ParentSetupScreenState extends ConsumerState<ParentSetupScreen> {
             final isSelected = config.maxSteps == steps;
             return Expanded(
               child: GestureDetector(
-                onTap: () =>
-                    ref.read(parentConfigProvider.notifier).setMaxSteps(steps),
+                onTap: () => _select(() =>
+                    ref.read(parentConfigProvider.notifier).setMaxSteps(steps)),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   margin: const EdgeInsets.symmetric(horizontal: 4),
@@ -481,9 +500,9 @@ class _ParentSetupScreenState extends ConsumerState<ParentSetupScreen> {
             final minutes = duration.inMinutes;
             return Expanded(
               child: GestureDetector(
-                onTap: () => ref
+                onTap: () => _select(() => ref
                     .read(parentConfigProvider.notifier)
-                    .setMaxDuration(duration),
+                    .setMaxDuration(duration)),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   margin: const EdgeInsets.symmetric(horizontal: 4),

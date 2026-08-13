@@ -1,6 +1,7 @@
 # Hvad Nu?! — Claude Code Session Guide
 
-Audio-first interactive storytelling app for Danish children (4-5 years). AI-powered, Flutter-based, cross-platform.
+Audio-first interactive storytelling app for young children (ages 4–5), in Danish and English.
+AI-powered, Flutter-based. Ships to iOS, Android, and web (Vercel).
 
 ## Quick Start
 
@@ -10,165 +11,257 @@ flutter pub get
 flutter run
 ```
 
-Ensure `.env` has valid API keys: `GEMINI_API_KEY`, `ELEVENLABS_API_KEY`, `OPENAI_API_KEY` (optional).
+`.env` needs exactly two keys (see `.env.example`):
+
+```
+GEMINI_API_KEY=...      # LLM + vision + speech-to-text
+ELEVENLABS_API_KEY=...  # Danish/English TTS
+```
+
+There is no OpenAI dependency. Speech-to-text goes through Gemini, not Whisper.
 
 ## Architecture
 
 ```
 lib/
-├── config/          # Themes, environments, narrator profiles, API setup
-├── models/          # GameSession, StoryState, PlayerAction, LLMResponse, ParentConfig
-├── services/        # LLM (Gemini), TTS (ElevenLabs), STT (Whisper), Camera, Session Storage
-├── providers/       # Riverpod dependency injection & reactive state
-├── screens/         # Setup → Player → Victory flow + Permissions/Loading screens
-├── widgets/         # Viewfinder, ActionButton, ProcessingOverlay, MagicParticles, ProgressIndicator
-└── utils/           # PromptBuilder, ErrorHandler, Exceptions
+├── config/          # api_config, app_theme, story_themes, environment_config, narrator_profiles
+├── models/          # GameSession, StoryState, PlayerAction, LLMResponse, ParentConfig, Participant
+├── services/        # LLM (Gemini), TTS (ElevenLabs), STT (Gemini audio), Camera, SessionStorage, Haptic
+├── providers/       # Riverpod: config_provider, game_session_provider, service_providers
+├── screens/         # Splash → Loading → Permissions → ParentSetup → AdventureStart → Player → Victory
+├── widgets/         # ThemedViewfinder, ActionButton, ProcessingOverlay, MagicParticles,
+│                    # StoryProgressIndicator, PermissionRequestWidget
+└── utils/           # PromptBuilder, ErrorHandler, exceptions
 ```
+
+Every directory has a barrel export (`models.dart`, `services.dart`, …). Import the barrel.
 
 ## Key Concepts
 
 ### Game Flow
-1. **Parent Setup** (`parent_setup_screen.dart`): Choose theme, environment, narrator, difficulty
-2. **Story Intro** (`adventure_start_screen.dart`): AI narrator sets context
-3. **Play Loop** (`player_screen.dart`): 
-   - Listen to challenge
-   - Child responds (photo OR voice)
-   - Gemini validates & continues story
-   - Repeat until victory
-4. **Victory** (`victory_screen.dart`): Celebration, crown the hero
+
+Navigation is split between two mechanisms — know which one you're in:
+
+- `AppNavigator` in `main.dart` is a `switch` over the `AppScreen` enum and covers
+  **splash → loading → permissions → setup**.
+- From `ParentSetupScreen` onward it's `Navigator.pushReplacement`:
+  **ParentSetup → AdventureStart → Player → Victory → (back to ParentSetup)**.
+
+1. **Parent Setup** (`parent_setup_screen.dart`) — language, participant names, theme,
+   environment, narrator, step count, duration.
+2. **Adventure Start** (`adventure_start_screen.dart`) — calls `initializeServices()`
+   (camera + mic permission), then `startNewGame()`.
+3. **Play Loop** (`player_screen.dart`) — tap the action button for a photo, long-press to
+   record speech. Gemini continues the story, ElevenLabs narrates, repeat.
+4. **Victory** (`victory_screen.dart`) — badge, stats, restart.
+
+### Game Phases
+
+`GamePhase` (in `game_session_provider.dart`) drives the whole UI:
+`idle → narrating → listening → recording/processing → narrating → … → victory | timeExpired | error`.
+
+A session ends on whichever comes first: `maxSteps` reached, or `maxDuration` elapsed.
+The time limit is polled by a 30-second `Timer.periodic`, so timeout is detected with up to
+30s of slack — that is intentional, not a bug.
+
+### Content Dimensions
+
+- **Themes** (`StoryTheme`): `dragejagt`, `rumrejsen`, `pirateventyret`, `roadtrip` — four, not three.
+- **Environments** (`Environment`): `house`, `playground`, `beach`, `forest`, `sailboat`, `car`.
+- **Narrators** (`NarratorProfile`): `wiseWizard`, `oldSeaCaptain`, `friendlyRobot` — each maps to
+  an ElevenLabs voice ID.
+- **Languages**: `da` and `en`. Every prompt in `PromptBuilder` exists in both.
+
+### Turn-Taking
+
+With 2+ participants, the active child is `currentStep % participants.length`.
+`GameSession.currentPlayer` / `GameSession.nextPlayer` are the single source of truth —
+`PromptBuilder` and `PlayerScreen` both read them. Don't recompute the index inline.
 
 ### Core Dependencies
 
 | Layer | Library | Purpose |
 |-------|---------|---------|
-| State | `flutter_riverpod` | Dependency injection + reactive state |
-| API | `dio` | HTTP client for Gemini, ElevenLabs, OpenAI |
+| State | `flutter_riverpod` | DI + reactive state |
+| API | `dio` | Gemini + ElevenLabs HTTP |
 | Storage | `hive` | Local session persistence |
-| Media | `camera`, `just_audio`, `record` | Photo, playback, STT |
-| UX | `google_fonts`, `flutter_animate`, `shimmer` | Typography, animations |
+| Media | `camera`, `just_audio`, `record`, `image` | Photo, playback, recording, compression |
+| UX | `google_fonts`, `flutter_animate`, `shimmer` | Typography, animation |
+| Test | `mocktail` | Service and notifier mocks |
 
-### API Costs (per 5-challenge session)
-- **Gemini 1.5 Pro**: ~$0.10–0.20 (multimodal image analysis)
-- **ElevenLabs TTS**: ~$0.15 (Danish voice)
-- **Whisper STT** (optional): ~$0.05
-- **Total**: ~$0.25–0.40/session
+### Models & Endpoints
+
+| Purpose | Provider | Model / Endpoint |
+|---------|----------|------------------|
+| Story + vision | Gemini | `gemini-2.5-flash` via `generativelanguage.googleapis.com/v1beta` |
+| Speech-to-text | Gemini | same endpoint, audio sent as inline base64 |
+| Text-to-speech | ElevenLabs | `eleven_multilingual_v2` |
+
+Timeouts live in `ApiConfig`: LLM 30s, TTS 15s, STT 15s.
+
+### API Costs
+
+Not re-measured since the move from Gemini 1.5 Pro to 2.5 Flash. Flash is dramatically cheaper
+per session, so **ElevenLabs TTS now dominates the per-session cost**. Treat any figure here as
+unverified until someone checks the billing dashboards against a real 5-challenge session.
 
 ## Development Practices
 
 ### State Management
-- Use Riverpod providers for all async operations (API calls, file I/O)
-- Prefer `@riverpod` annotations + code generation (`build_runner`) over manual providers
-- Keep providers focused & composable; avoid god-providers
+
+- All providers are **manually declared** (`StateNotifierProvider`, `Provider`). Although
+  `riverpod_generator` and `build_runner` are in `dev_dependencies`, **no code generation is
+  wired up and there are no `.g.dart` files**. Follow the manual pattern; don't introduce
+  `@riverpod` annotations without converting the whole `providers/` directory.
+- Services are exposed via `service_providers.dart` with `ref.onDispose` cleanup.
+- `GameSessionNotifier` owns the game loop. Keep API calls in services, orchestration here.
 
 ### Error Handling
-- All API failures must use `ErrorHandler` (`lib/utils/error_handler.dart`)
-- Display user-friendly messages; log full stack traces to console
-- Never leave users in a broken state—always offer retry or back navigation
+
+- Services throw typed exceptions from `lib/utils/exceptions.dart` (`ApiException`,
+  `NetworkException`, `CameraException`, `MicrophoneException`, `StorageException`).
+- UI surfaces them with `ErrorHandler.showErrorSnackbar` / `ErrorHandler.tryAsync`.
+  `ErrorHandler.describe` turns any error into a child-safe message without needing a
+  `BuildContext`, which is what the notifier uses.
+- The game loop must **never** dead-end. `LLMService` and `GameSessionNotifier` fall back to
+  canned narration rather than propagating failures to the child. TTS failure is logged and
+  swallowed so play continues in silence.
+- Use `debugPrint`, not `print`.
 
 ### Prompting Gemini
-- Use `PromptBuilder` (`lib/utils/prompt_builder.dart`) for consistent prompt construction
-- Always include:
-  - Story theme context (Dragon/Space/Pirate)
-  - Current environment & narrator voice
-  - Child's previous actions/photos
-  - Tone: positive, encouraging, never reject child's input
-- Validate `LLMResponse` structure before consuming
+
+- All prompt construction goes through `PromptBuilder` (`lib/utils/prompt_builder.dart`,
+  the largest file in the project at ~480 lines).
+- `buildSystemPrompt` covers persona, safety rails, theme, environment, narrator, and
+  turn-taking. `buildUserMessage` adds the current turn. There are also `buildVictoryPrompt`
+  and `buildTimeExpiredPrompt`.
+- Each theme carries ~10 challenge categories to keep challenges from repeating.
+- Gemini is asked for JSON. `LLMService._parseResponse` handles fenced JSON, bare JSON, and
+  falls back to `_extractFromPlainText`. Any change to the response contract needs all three
+  paths updated.
+- **Do not remove `thinkingConfig: {thinkingBudget: 0}`.** `gemini-2.5-flash` reasons before
+  answering by default and those thinking tokens count against `maxOutputTokens`. At this
+  budget thinking can consume all of it, returning a candidate with *no parts*, which sends
+  every turn down the canned-fallback path — the narrator keeps talking but stops describing
+  the child's photo. Storytelling doesn't need reasoning, and latency matters here.
+- Safety thresholds are `BLOCK_ONLY_HIGH`. `BLOCK_NONE` is a restricted setting that isn't
+  granted to every API key and 400s the whole request.
+- `LLMService._extractText` is deliberately verbose about *why* a response was unusable
+  (`finishReason`, `blockReason`, `usageMetadata`). Fallbacks are invisible to the child by
+  design, so the log is the only place a regression here will show up.
+- Story context is truncated by `StoryState.getTruncatedHistoryForLLM()` (last 5 turns).
+- Tone: always positive, never reject the child's input.
 
 ### Testing
-- Unit tests: Core services (LLM, TTS, Session Storage)
-- Widget tests: Screens & critical widgets (Viewfinder, ActionButton)
-- Manual testing: Full game flow on device (permissions, audio, camera)
-- Test files: `test/` directory; run with `flutter test`
 
-### Permissions & Platform-Specific Code
-- Camera & microphone permissions handled in `permission_request_widget.dart`
-- Android: Uses `permission_handler` + runtime permission logic
-- iOS: Requires `Info.plist` declarations (camera, microphone, photo library)
-- Test on both platforms before merging
+```bash
+flutter test
+```
+
+`test/` covers models, config enums, `PromptBuilder`, services, the game-session notifier,
+and a few widgets. `mocktail` is the mocking library — use it rather than hand-rolled fakes.
+
+Service tests inject a `Dio` instance so HTTP can be stubbed. **Service constructors take an
+optional `Dio` parameter for exactly this reason — preserve it.**
+
+Still uncovered and worth adding: `PlayerScreen` and `VictoryScreen` widget tests, and an
+end-to-end pass through the full game flow on a device.
+
+### Permissions & Platform
+
+- `PermissionsScreen` sits between Loading and Setup in `AppNavigator`, and is skipped on web
+  (browsers prompt on first use instead).
+- Android: `permission_handler` + runtime requests. iOS: `Info.plist` needs camera, microphone,
+  and photo library entries.
+- Use `kIsWeb` from `package:flutter/foundation.dart`. Do **not** re-derive it with
+  `identical(0, 0.0)`, and never import `dart:io` from code reachable on web.
 
 ### Assets & Theming
-- Themes stored in `assets/themes/` (Dragon/Space/Pirate configs)
-- Fonts: Google Fonts via `google_fonts` package
-- Audio clips: `assets/audio/` (if pre-recorded audio used)
-- Load via Flutter asset manifest; no hard-coded paths
+
+- Theme configs in `assets/themes/`, audio in `assets/audio/`, both registered in `pubspec.yaml`.
+- Gradients and accent colours per theme come from `AppTheme.getThemeGradient` /
+  `getThemeAccentColor`, keyed by `StoryTheme.name`.
+
+## Web / Vercel Deployment
+
+**Vercel is the only deployment path.** The GitHub Actions workflows were deleted: one
+committed a keyless `public/` that clobbered the Vercel build, the other published a blank
+Pages site from a wrong `--base-href`. Don't reintroduce a second path without deciding which
+one owns `public/`.
+
+| File | Role |
+|------|------|
+| `vercel.json` | `buildCommand: node build.js`, output `public/` |
+| `build.js` | Downloads the Flutter SDK, runs `flutter build web`, injects the API keys |
+| `build.sh` | Older shell equivalent, kept for local use |
+| `server.js` | Only for running the build locally under Express; Vercel never executes it |
+| `public/` | Generated build output — **gitignored**, regenerated on every deploy |
+
+On web there is no `.env`. `ApiConfig` reads `window.apiConfig` through a conditional import
+(`api_config_web.dart` on web, `api_config_stub.dart` elsewhere) so mobile never pulls in
+`dart:js_interop`. `build.js` writes that object into `public/index.html` at build time from
+the `GEMINI_API_KEY` and `ELEVENLABS_API_KEY` Vercel environment variables — the static output
+means `server.js`'s request-time injection never runs. If keys are missing, `LoadingScreen`
+shows the configuration error.
+
+**The web build ships both API keys to every visitor in plain text.** That is inherent to
+calling Gemini and ElevenLabs directly from the browser. Anything genuinely public should
+proxy these calls through a server instead.
+
+Camera is skipped on web — `CameraService.initialize()` returns successfully with a null
+controller, and `ThemedViewfinder` must tolerate that.
 
 ## Common Tasks
 
-### Adding a New Story Theme
-1. Create theme config in `lib/config/story_themes.dart`
-2. Add narrator profile to `lib/config/narrator_profiles.dart`
-3. Update `ParentConfig` model in `lib/models/parent_config.dart`
-4. Extend `PromptBuilder` to include theme-specific context
-5. Test full flow: Setup → Play → Victory
+### Adding a Story Theme
 
-### Tweaking Gemini Prompts
-- Edit prompt templates in `lib/utils/prompt_builder.dart`
-- Test with `flutter run` + manual iteration on device
-- Log full LLM requests/responses for debugging: check `dio` interceptors in `api_config.dart`
+1. Add the enum case + display data in `lib/config/story_themes.dart`.
+2. Add gradient and accent colour in `lib/config/app_theme.dart`.
+3. Add the theme's challenge-category block to `PromptBuilder`, **in both Danish and English**.
+4. Add a victory badge in `victory_screen.dart`.
+5. Play the full flow: Setup → Play → Victory.
 
-### Adding a New Narrator Voice
-1. Create voice profile in `lib/config/narrator_profiles.dart` (ElevenLabs voice ID)
-2. Update `ParentConfig` model choices
-3. Pass voice ID to `TtsService` during playback
-4. Test audio output on device
+### Adding a Narrator Voice
+
+1. Add the profile + ElevenLabs voice ID in `lib/config/narrator_profiles.dart`.
+2. It flows automatically through `ParentConfig.elevenLabsVoiceId` into `TTSService`.
+3. Verify the voice actually supports the target language.
 
 ### Debugging API Issues
-- Check `.env` has valid API keys
-- Enable Dio debug logging in `lib/config/api_config.dart` to inspect requests/responses
-- Use browser DevTools or Charles Proxy to inspect HTTPS traffic (if testing web)
-- Gemini: Verify image format (JPEG/PNG) & size; check quota & billing in Google Cloud console
-- ElevenLabs: Verify voice ID, text encoding (UTF-8), check API usage dashboard
+
+- Confirm `.env` keys load (mobile) or `window.apiConfig` is present (web).
+- `ApiConfig.isConfigured` gates startup in `LoadingScreen`.
+- Gemini: check the image is non-empty JPEG base64; check quota in the Google Cloud console.
+- ElevenLabs: check voice ID and UTF-8 encoding; watch the usage dashboard.
 
 ## Code Style
 
-- **Naming**: `camelCase` for variables/functions, `PascalCase` for classes/widgets
-- **Imports**: Group by (dart:, flutter:, packages, relative paths); use `import as` for clarity
-- **Formatting**: Run `flutter format lib/` before committing
-- **Analysis**: `flutter analyze` should pass; check `analysis_options.yaml` for lint rules
-- **Comments**: Only for *why*, not *what*; let code be self-documenting
-- **Line Length**: Target <100 chars; break long chains at logical boundaries
-
-## File Organization
-
-- Keep files focused; one main class per file (except models/constants)
-- Avoid circular dependencies; use Riverpod for dependency injection
-- Use barrel exports (`widgets.dart`, `services.dart`) for clean imports
-- Example: `import 'lib/widgets/widgets.dart'` instead of multiple specific imports
-
-## Performance & Optimization
-
-- **Image Handling**: Compress photos before sending to Gemini (reduce payload)
-- **Audio**: Preload TTS audio; cache voice IDs to minimize API calls
-- **UI**: Use `const` constructors where possible; memoize expensive builds with `Riverpod` selectors
-- **Storage**: Hive is local; offload persistent sync to cloud separately if needed
+- `camelCase` members, `PascalCase` types. One main class per file.
+- Group imports: `dart:`, `package:flutter`, other packages, then relative.
+- `flutter format lib/` and `flutter analyze` before committing; lints in `analysis_options.yaml`.
+- Comments explain *why*, not *what*. Target <100 char lines.
+- `const` constructors wherever possible.
 
 ## Troubleshooting
 
 | Issue | Solution |
 |-------|----------|
-| Camera permissions denied | Check iOS `Info.plist` + Android `AndroidManifest.xml`; test on device |
-| Gemini API 401 errors | Verify `GEMINI_API_KEY` in `.env`; check Google Cloud API enabled |
-| TTS audio stutters | Reduce text length; check network latency; test on different devices |
-| Riverpod provider not rebuilding | Ensure mutation triggers `ref.invalidate()` or `.copyWith()` in model |
-| Hive box not persisting | Ensure `await Hive.initFlutter()` called before opening boxes |
+| Camera permission denied | Check iOS `Info.plist` + Android `AndroidManifest.xml`; test on device |
+| Gemini 401 / 403 | Verify `GEMINI_API_KEY`; confirm the API is enabled in Google Cloud |
+| Web build fails on `dart:io` | Something in the import graph pulled in `dart:io`; use conditional imports |
+| Web has no API keys | `server.js` isn't injecting `window.apiConfig` — check the deploy env vars |
+| TTS stutters | Shorten text; try `streamDanish()`; check network latency |
+| Provider not rebuilding | State is immutable — mutate via `copyWith()`, or `ref.invalidate()` |
+| Hive box not persisting | `SessionStorageService.initialize()` must run before any read/write |
 
 ## External Resources
 
-- [Flutter Docs](https://flutter.dev/docs)
-- [Riverpod Guide](https://riverpod.dev)
-- [Gemini API](https://ai.google.dev)
-- [ElevenLabs TTS](https://elevenlabs.io/docs)
-- [Hive Database](https://docs.hivedb.dev)
-
-## CI/CD & Deployment
-
-- Pre-commit: Run `flutter format` & `flutter analyze`
-- Tests: `flutter test` must pass
-- Build: `flutter build apk` (Android) or `flutter build ios` (iOS)
-- Release: Follow app store guidelines (Google Play, Apple App Store)
+- [Flutter](https://flutter.dev/docs) · [Riverpod](https://riverpod.dev) ·
+  [Gemini API](https://ai.google.dev) · [ElevenLabs](https://elevenlabs.io/docs) ·
+  [Hive](https://docs.hivedb.dev)
 
 ---
 
-**Last Updated**: 2026-06-01  
-**Maintainers**: AI-assisted development  
+**Last Updated**: 2026-08-12
+**Maintainers**: AI-assisted development
 **License**: Private / Commercial

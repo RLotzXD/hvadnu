@@ -1,8 +1,9 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'dart:io';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import 'config/app_theme.dart';
 import 'screens/screens.dart';
 
@@ -45,8 +46,6 @@ Future<void> main() async {
   );
 }
 
-const bool kIsWeb = identical(0, 0.0);
-
 class HvadNuApp extends StatelessWidget {
   const HvadNuApp({super.key});
 
@@ -76,29 +75,42 @@ class _AppNavigatorState extends State<AppNavigator> {
     switch (_currentScreen) {
       case AppScreen.splash:
         return SplashScreen(
-          onComplete: () {
-            setState(() => _currentScreen = AppScreen.loading);
-          },
+          onComplete: () => _goTo(AppScreen.loading),
         );
 
       case AppScreen.loading:
         return LoadingScreen(
-          onReady: () {
-            setState(() => _currentScreen = AppScreen.setup);
-          },
+          onReady: () => _goTo(_afterLoading),
           onError: () {
-            // Stay on loading screen with error display
+            // Stay on the loading screen, which renders its own error state.
           },
+        );
+
+      case AppScreen.permissions:
+        return PermissionsScreen(
+          onAllGranted: () => _goTo(AppScreen.setup),
+          onSkipped: () => _goTo(AppScreen.setup),
         );
 
       case AppScreen.setup:
         return const ParentSetupScreen();
     }
   }
+
+  /// Browsers prompt for camera and microphone on first use and
+  /// `permission_handler` is a no-op there, so the screen would be a dead end.
+  AppScreen get _afterLoading =>
+      kIsWeb ? AppScreen.setup : AppScreen.permissions;
+
+  void _goTo(AppScreen screen) {
+    if (!mounted) return;
+    setState(() => _currentScreen = screen);
+  }
 }
 
 enum AppScreen {
   splash,
   loading,
+  permissions,
   setup,
 }

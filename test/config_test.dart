@@ -13,12 +13,21 @@ void main() {
       }
     });
 
-    test('all themes have initial challenges in Danish', () {
+    test('all themes have initial challenges in both languages', () {
+      // The old version of this test asserted the Danish challenge did not
+      // contain "find" as a proxy for "not English" — but "find"/"finde" is
+      // ordinary Danish, so it failed on every theme that used it.
       for (final theme in StoryTheme.values) {
-        final challenge = theme.initialChallenge;
-        expect(challenge.isNotEmpty, true);
-        // Basic check that it's not English
-        expect(challenge.contains('find') || challenge.contains('Find'), false);
+        final danish = theme.getInitialChallenge('Emma', 'da');
+        final english = theme.getInitialChallenge('Emma', 'en');
+
+        expect(danish.isNotEmpty, true, reason: '${theme.name} da');
+        expect(english.isNotEmpty, true, reason: '${theme.name} en');
+        expect(danish == english, false, reason: '${theme.name} not translated');
+
+        // Each greets the child by name in its own language.
+        expect(danish.contains('Hej, Emma!'), true, reason: '${theme.name} da');
+        expect(english.contains('Hey, Emma!'), true, reason: '${theme.name} en');
       }
     });
 
@@ -47,7 +56,7 @@ void main() {
     });
 
     test('contextForLLM includes environment name and objects', () {
-      final env = Environment.house;
+      const env = Environment.house;
       final context = env.contextForLLM;
 
       expect(context.contains('hjemme'), true);

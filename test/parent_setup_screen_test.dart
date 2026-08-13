@@ -76,9 +76,12 @@ void main() {
         ),
       );
 
+      // '5' is deliberately not asserted as unique: it is both a step count
+      // and a duration in minutes, so two widgets legitimately show it.
       expect(find.text('3'), findsOneWidget);
-      expect(find.text('5'), findsOneWidget);
       expect(find.text('8'), findsOneWidget);
+      expect(find.text('5'), findsNWidgets(2));
+      expect(find.text('skridt'), findsNWidgets(3));
     });
 
     testWidgets('displays start button', (tester) async {

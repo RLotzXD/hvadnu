@@ -1,9 +1,12 @@
 import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../models/models.dart';
 import '../services/services.dart';
-import 'service_providers.dart';
+import '../utils/error_handler.dart';
 import 'config_provider.dart';
+import 'service_providers.dart';
 
 enum GamePhase {
   idle,
@@ -31,15 +34,20 @@ class GameState {
     this.isMicReady = false,
   });
 
+  /// [errorMessage] is intentionally not `??`-merged: omitting it clears the
+  /// error, so a state change always supersedes the previous message.
+  /// [clearSession] exists because `session: null` cannot mean "remove" while
+  /// it also means "leave unchanged".
   GameState copyWith({
     GameSession? session,
     GamePhase? phase,
     String? errorMessage,
     bool? isCameraReady,
     bool? isMicReady,
+    bool clearSession = false,
   }) {
     return GameState(
-      session: session ?? this.session,
+      session: clearSession ? null : (session ?? this.session),
       phase: phase ?? this.phase,
       errorMessage: errorMessage,
       isCameraReady: isCameraReady ?? this.isCameraReady,
@@ -47,7 +55,9 @@ class GameState {
     );
   }
 
-  bool get isReady => isCameraReady && session != null;
+  /// Playable as soon as there's a session and at least one way for the child
+  /// to answer. A device with no camera (or web) is voice-only, not broken.
+  bool get isReady => session != null && (isCameraReady || isMicReady);
   bool get isPlaying => phase == GamePhase.listening || phase == GamePhase.recording;
   bool get isProcessing => phase == GamePhase.processing || phase == GamePhase.narrating;
 }
@@ -64,16 +74,20 @@ class GameSessionNotifier extends StateNotifier<GameState> {
   CameraService get _cameraService => _ref.read(cameraServiceProvider);
   SessionStorageService get _storage => _ref.read(sessionStorageProvider);
 
+  String get _language => state.session?.config.language ??
+      _ref.read(parentConfigProvider).language;
+
   Future<void> initializeServices() async {
     try {
       await _cameraService.initialize();
-      state = state.copyWith(isCameraReady: true);
+      state = state.copyWith(isCameraReady: _cameraService.hasCamera);
 
       final hasMicPermission = await _sttService.hasPermission();
       state = state.copyWith(isMicReady: hasMicPermission);
-    } catch (e) {
+    } catch (e, stackTrace) {
+      ErrorHandler.log('GameSession.initializeServices', e, stackTrace);
       state = state.copyWith(
-        errorMessage: 'Kunne ikke initialisere kamera: $e',
+        errorMessage: ErrorHandler.describe(e, language: _language),
         phase: GamePhase.error,
       );
     }
@@ -128,12 +142,12 @@ class GameSessionNotifier extends StateNotifier<GameState> {
     try {
       final response = await _llmService.generateTimeExpiredNarration(session);
       await _playNarration(response.fullNarration);
-    } catch (e) {
-      // Play fallback narration
+    } catch (e, stackTrace) {
+      ErrorHandler.log('GameSession.handleTimeExpired', e, stackTrace);
       final isEnglish = session.config.language == 'en';
       final fallback = isEnglish
           ? "Oh no! Time has run out! But don't worry - you were so brave! Want to try again?"
-          : "Åh nej! Tiden er løbet ud! Men bare rolig - du var så modig! Vil du prøve igen?";
+          : 'Åh nej! Tiden er løbet ud! Men bare rolig - du var så modig! Vil du prøve igen?';
       await _playNarration(fallback);
     }
 
@@ -147,21 +161,18 @@ class GameSessionNotifier extends StateNotifier<GameState> {
   }
 
   Future<void> capturePhoto() async {
-    if (state.phase != GamePhase.listening) {
-      print('Cannot capture: phase is ${state.phase}');
-      return;
-    }
+    if (state.phase != GamePhase.listening) return;
 
     state = state.copyWith(phase: GamePhase.processing);
 
     try {
       final action = await _cameraService.capturePhoto();
       await _processPlayerAction(action);
-    } catch (e) {
-      print('Photo capture error: $e');
+    } catch (e, stackTrace) {
+      ErrorHandler.log('GameSession.capturePhoto', e, stackTrace);
       state = state.copyWith(
         phase: GamePhase.listening,
-        errorMessage: 'Kunne ikke tage billede: $e',
+        errorMessage: ErrorHandler.describe(e, language: _language),
       );
     }
   }
@@ -172,9 +183,11 @@ class GameSessionNotifier extends StateNotifier<GameState> {
     try {
       await _sttService.startRecording();
       state = state.copyWith(phase: GamePhase.recording);
-    } catch (e) {
+    } catch (e, stackTrace) {
+      ErrorHandler.log('GameSession.startRecording', e, stackTrace);
       state = state.copyWith(
-        errorMessage: 'Kunne ikke starte optagelse: $e',
+        phase: GamePhase.listening,
+        errorMessage: ErrorHandler.describe(e, language: _language),
       );
     }
   }
@@ -185,16 +198,20 @@ class GameSessionNotifier extends StateNotifier<GameState> {
     state = state.copyWith(phase: GamePhase.processing);
 
     try {
-      final action = await _sttService.stopRecordingAndTranscribe();
+      final action = await _sttService.stopRecordingAndTranscribe(
+        language: _language,
+      );
       if (action != null) {
         await _processPlayerAction(action);
       } else {
+        // Nothing intelligible was said; silently hand the turn back.
         state = state.copyWith(phase: GamePhase.listening);
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      ErrorHandler.log('GameSession.stopRecording', e, stackTrace);
       state = state.copyWith(
         phase: GamePhase.listening,
-        errorMessage: 'Kunne ikke transskribere: $e',
+        errorMessage: ErrorHandler.describe(e, language: _language),
       );
     }
   }
@@ -244,7 +261,8 @@ class GameSessionNotifier extends StateNotifier<GameState> {
       } else {
         state = state.copyWith(phase: GamePhase.listening);
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      ErrorHandler.log('GameSession.processPlayerAction', e, stackTrace);
       final fallback = LLMResponse.fallback(
         actionType: action.type,
         participantName: fallbackName,
@@ -255,6 +273,8 @@ class GameSessionNotifier extends StateNotifier<GameState> {
     }
   }
 
+  /// Narration is best-effort. If ElevenLabs is down the adventure continues
+  /// in silence rather than stranding the child on a dead screen.
   Future<void> _playNarration(String text) async {
     final session = state.session;
     if (session == null) return;
@@ -264,9 +284,8 @@ class GameSessionNotifier extends StateNotifier<GameState> {
         text: text,
         voiceId: session.config.elevenLabsVoiceId,
       );
-    } catch (e) {
-      // TTS failed, but continue anyway - don't block the game
-      print('TTS error (continuing anyway): $e');
+    } catch (e, stackTrace) {
+      ErrorHandler.log('GameSession.playNarration', e, stackTrace);
     }
   }
 
@@ -303,7 +322,7 @@ class GameSessionNotifier extends StateNotifier<GameState> {
     await _sttService.cancelRecording();
 
     state = state.copyWith(
-      session: null,
+      clearSession: true,
       phase: GamePhase.idle,
     );
   }
@@ -344,4 +363,17 @@ final timeRemainingProvider = Provider<Duration>((ref) {
 final currentChallengeProvider = Provider<String>((ref) {
   final gameState = ref.watch(gameSessionProvider);
   return gameState.session?.storyState.currentChallenge ?? '';
+});
+
+/// The child whose turn it is, or null when nobody was named at setup.
+final currentPlayerProvider = Provider<Participant?>((ref) {
+  final gameState = ref.watch(gameSessionProvider);
+  return gameState.session?.currentPlayer;
+});
+
+/// True only when turns actually rotate, so single-child games don't get a
+/// pointless "your turn" badge.
+final isMultiplayerProvider = Provider<bool>((ref) {
+  final gameState = ref.watch(gameSessionProvider);
+  return gameState.session?.isMultiplayer ?? false;
 });
