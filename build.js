@@ -116,18 +116,31 @@ function injectApiConfig() {
   // Trim, because a key pasted into the Vercel dashboard with a trailing
   // newline or space is still "set" but produces 401 invalid_api_key at
   // runtime — which looks like a code bug from inside the app.
+  // Also strip a leading "NAME=" — pasting the whole .env line into Vercel's
+  // Value box is an easy slip, and the result is a key the API rejects with
+  // 401 invalid_api_key, which looks nothing like a copy-paste mistake from
+  // inside the app.
+  const clean = (name, value) =>
+    value
+      .trim()
+      .replace(new RegExp(`^${name}\\s*=\\s*`), '')
+      .replace(/^["']|["']$/g, '')
+      .trim();
+
   const geminiRaw = process.env.GEMINI_API_KEY || '';
   const elevenLabsRaw = process.env.ELEVENLABS_API_KEY || '';
-  const gemini = geminiRaw.trim().replace(/^["']|["']$/g, '');
-  const elevenLabs = elevenLabsRaw.trim().replace(/^["']|["']$/g, '');
+  const gemini = clean('GEMINI_API_KEY', geminiRaw);
+  const elevenLabs = clean('ELEVENLABS_API_KEY', elevenLabsRaw);
 
   // Fingerprint rather than the value: enough to spot a truncated or
   // mis-pasted key against the local .env, without printing a secret into a
   // build log that anyone on the team can read.
   const describe = (name, cleaned, raw) => {
     if (!cleaned) return `${name}: MISSING`;
-    const trimmedNote = cleaned === raw ? '' : ' (had surrounding whitespace/quotes — trimmed)';
-    return `${name}: length=${cleaned.length} ends=${cleaned.slice(-3)}${trimmedNote}`;
+    const note = cleaned === raw
+        ? ''
+        : ' (cleaned: the value had a NAME= prefix, quotes or whitespace)';
+    return `${name}: length=${cleaned.length} ends=${cleaned.slice(-3)}${note}`;
   };
 
   console.log(describe('GEMINI_API_KEY', gemini, geminiRaw));
